@@ -29,6 +29,23 @@ Notes:
 - `AuthorIcon`: Embed author icon URL
 - `UseFieldIcons`: Toggle emoji labels in fields
 
+## Language and Translations
+`Config.Locale` selects the active language (default `en`).
+
+`Config.Translations` contains translation tables. You can add a new language by
+adding a new key (e.g. `fr`) and copying the same structure as `en`.
+
+Example:
+```
+Config.Locale = "fr"
+Config.Translations.fr = {
+    labels = { player = "Joueur", ... },
+    embeds = { drop_title = "...", drop_desc = "...", ... },
+    templates = { esx_info = "Identifier: `{identifier}`\\nJob: `{job}`\\nGroup: `{group}`", ... },
+    messages = { no_permission = "Pas de permission.", ... }
+}
+```
+
 ## Colors
 `Config.Colors` sets embed colors by event type. Values are hex integers, e.g. `0x2ecc71`.
 

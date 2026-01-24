@@ -1,27 +1,3 @@
---============================================================--
--- © Ian-Thomas Holtz – Netica | Proprietary software. Use only with written license or active employment. Unauthorized use prohibited.
---============================================================--
---  essentials/server/ox_logs.lua
---  ox_inventory → Discord Logs (DE)
---
---  Enthält:
---   - Embeds mit Feldern & Icons (Author, Footer, Timestamp)
---   - Steam/License/Discord-Identifier + optional IP (Endpoint)
---   - ESX Infos (identifier, job/grade, group)
---   - Korrekte Mengen bei Stack/Move/Swap: payload.count (statt fromSlot.count)
---   - Dupe-Heuristik + Auto-Blacklist (KVP) + optional Kick
---   - Logs für Admin/AddItem (createItem Hook)
---   - Logs für RemoveItem per Befehl/Script inkl.:
---       * Wer hat entfernt (Admin Name/Group aus ESX)
---       * Aus welchem Inventory (Player vs Stash)
---   - Wrapper-Command: /removeitem <id> <item> <count>
---       * loggt + entfernt zuverlässig über exports.ox_inventory:RemoveItem(...)
---
---  Wichtig:
---   - Wenn du bereits einen /removeitem Command in einer anderen Resource hast,
---     dann entferne dort den Command oder benenne diesen hier um, sonst Konflikt.
---============================================================
-
 --============================================================
 -- ESX
 --============================================================
@@ -70,6 +46,36 @@ local function isAllowedGroup(src)
     if not Config.RemoveCommand.Enabled then return false end
     local g = esxInfo(src).group
     return Config.RemoveCommand.AllowedGroups[g] == true
+end
+
+--============================================================
+-- Translations
+--============================================================
+local function resolveTranslation(lang, key)
+    local root = Config.Translations and Config.Translations[lang]
+    if type(root) ~= "table" then return nil end
+
+    local node = root
+    for part in key:gmatch("[^%.]+") do
+        if type(node) ~= "table" then return nil end
+        node = node[part]
+    end
+
+    return node
+end
+
+local function t(key, vars)
+    local locale = Config.Locale or "en"
+    local str = resolveTranslation(locale, key) or resolveTranslation("en", key)
+    if type(str) ~= "string" then return key end
+
+    if vars then
+        for k, v in pairs(vars) do
+            str = str:gsub("{" .. k .. "}", tostring(v))
+        end
+    end
+
+    return str
 end
 
 --============================================================
@@ -249,16 +255,16 @@ local function playerFields(src)
     local mention = did and ("<@" .. did .. ">") or "n/a"
 
     local fields = {
-        fi(withIcon("Spieler", "👤"), ("**%s** (ID: `%s`)"):format(pname(src), tostring(src)), true),
-        fi(withIcon("ESX", "🧾"), ("Identifier: `%s`\nJob: `%s`\nGroup: `%s`"):format(safeStr(esx.identifier), safeStr(esx.job), safeStr(esx.group)), false),
-        fi(withIcon("License", "🔐"), "`" .. safeStr(getLicense(src)) .. "`", true),
-        fi(withIcon("Steam", "🎮"), "`" .. safeStr(getSteam(src)) .. "`", true),
-        fi(withIcon("Discord", "💬"), mention, true),
-        fi(withIcon("Position", "📍"), "`" .. pcoords(src) .. "`", true),
+        fi(withIcon(t("labels.player"), "👤"), ("**%s** (ID: `%s`)"):format(pname(src), tostring(src)), true),
+        fi(withIcon(t("labels.esx"), "🧾"), t("templates.esx_info", { identifier = safeStr(esx.identifier), job = safeStr(esx.job), group = safeStr(esx.group) }), false),
+        fi(withIcon(t("labels.license"), "🔐"), "`" .. safeStr(getLicense(src)) .. "`", true),
+        fi(withIcon(t("labels.steam"), "🎮"), "`" .. safeStr(getSteam(src)) .. "`", true),
+        fi(withIcon(t("labels.discord"), "💬"), mention, true),
+        fi(withIcon(t("labels.position"), "📍"), "`" .. pcoords(src) .. "`", true),
     }
 
     if Config.Privacy.LogIP then
-        fields[#fields + 1] = fi(withIcon("IP", "🌐"), "`" .. safeStr(getIP(src)) .. "`", true)
+        fields[#fields + 1] = fi(withIcon(t("labels.ip"), "🌐"), "`" .. safeStr(getIP(src)) .. "`", true)
     end
 
     return fields
@@ -269,32 +275,32 @@ local function itemFieldsFromSwap(payload)
     local amount = movedCount(payload)
 
     return {
-        fi(withIcon("Item", "📦"), "`" .. safeStr(slotName(slot)) .. "`", true),
-        fi(withIcon("Menge", "🔢"), "`" .. tostring(amount) .. "`", true),
-        fi(withIcon("Aktion", "⚙️"), "`" .. safeStr(payload and payload.action) .. "`", true),
-        fi(withIcon("Metadaten", "🧾"), "```json\n" .. safeStr(slotMeta(slot)) .. "\n```", false),
+        fi(withIcon(t("labels.item"), "📦"), "`" .. safeStr(slotName(slot)) .. "`", true),
+        fi(withIcon(t("labels.amount"), "🔢"), "`" .. tostring(amount) .. "`", true),
+        fi(withIcon(t("labels.action"), "⚙️"), "`" .. safeStr(payload and payload.action) .. "`", true),
+        fi(withIcon(t("labels.metadata"), "🧾"), "```json\n" .. safeStr(slotMeta(slot)) .. "\n```", false),
     }
 end
 
 local function adminFields(removerSrc)
     local esx = esxInfo(removerSrc)
     return {
-        fi(withIcon("Entfernt von", "🛠️"), ("**%s** (ID: `%s`)"):format(pname(removerSrc), tostring(removerSrc)), true),
-        fi(withIcon("Admin Gruppe", "🧷"), "`" .. safeStr(esx.group) .. "`", true),
-        fi(withIcon("Admin Identifier", "🪪"), "`" .. safeStr(esx.identifier) .. "`", false),
+        fi(withIcon(t("labels.removed_by"), "🛠️"), ("**%s** (ID: `%s`)"):format(pname(removerSrc), tostring(removerSrc)), true),
+        fi(withIcon(t("labels.admin_group"), "🧷"), "`" .. safeStr(esx.group) .. "`", true),
+        fi(withIcon(t("labels.admin_identifier"), "🪪"), "`" .. safeStr(esx.identifier) .. "`", false),
     }
 end
 
 local function inventoryField(invType, invId)
-    local label = "Ziel-Inventory"
+    local label = t("labels.target_inventory")
     local icon = "🗃️"
 
     if invType == "player" then
-        label, icon = "Ziel-Inventory (Player)", "👤"
+        label, icon = t("labels.target_inventory_player"), "👤"
     elseif invType == "stash" then
-        label, icon = "Ziel-Inventory (Stash)", "🗄️"
+        label, icon = t("labels.target_inventory_stash"), "🗄️"
     elseif invType == "drop" then
-        label, icon = "Ziel-Inventory (Drop)", "🧺"
+        label, icon = t("labels.target_inventory_drop"), "🧺"
     end
 
     return fi(withIcon(label, icon), "`" .. safeStr(invType) .. ":" .. safeStr(invId) .. "`", false)
@@ -370,12 +376,12 @@ local function dupeHeuristic(src, payload)
 end
 
 local function logDupe(src, payload, reason)
-    local e = baseEmbed("Dupe-Verdacht", Config.Colors.dupe)
-    e.description = "Verdächtiges Inventar-Pattern erkannt."
+    local e = baseEmbed(t("embeds.dupe_title"), Config.Colors.dupe)
+    e.description = t("embeds.dupe_desc")
     e.fields = {}
 
     for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
-    e.fields[#e.fields+1] = fi(withIcon("Grund", "⚠️"), "`" .. safeStr(reason) .. "`", false)
+    e.fields[#e.fields+1] = fi(withIcon(t("labels.reason"), "⚠️"), "`" .. safeStr(reason) .. "`", false)
     for _, f in ipairs(itemFieldsFromSwap(payload)) do e.fields[#e.fields+1] = f end
 
     local key = (Config.Webhooks.dupe ~= "" and "dupe") or "stash"
@@ -418,8 +424,8 @@ end
 local function buildRemoveEmbed(removerSrc, targetInv, item, count, metadata, slot, reason)
     local invType, invId = normalizeInventory(targetInv)
 
-    local e = baseEmbed("Item gelöscht (RemoveItem)", Config.Colors.remove)
-    e.description = "Ein Item wurde per Befehl/Script aus einem Inventar entfernt."
+    local e = baseEmbed(t("embeds.remove_title"), Config.Colors.remove)
+    e.description = t("embeds.remove_desc")
     e.fields = {}
 
     for _, f in ipairs(adminFields(removerSrc)) do e.fields[#e.fields+1] = f end
@@ -429,23 +435,20 @@ local function buildRemoveEmbed(removerSrc, targetInv, item, count, metadata, sl
         local targetId = tonumber(invId)
         if targetId then
             local esxT = esxInfo(targetId)
-            e.fields[#e.fields+1] = fi(withIcon("Ziel-Spieler", "🎯"),
-                ("**%s** (ID: `%s`)\nIdentifier: `%s`\nJob: `%s`\nGroup: `%s`"):format(
-                    pname(targetId), tostring(targetId),
-                    safeStr(esxT.identifier), safeStr(esxT.job), safeStr(esxT.group)
-                ),
+            e.fields[#e.fields+1] = fi(withIcon(t("labels.target_player"), "🎯"),
+                t("templates.target_player", { name = pname(targetId), id = tostring(targetId), identifier = safeStr(esxT.identifier), job = safeStr(esxT.job), group = safeStr(esxT.group) }),
                 false
             )
         end
     end
 
-    e.fields[#e.fields+1] = fi(withIcon("Item", "🗑️"), "`" .. safeStr(item) .. "`", true)
-    e.fields[#e.fields+1] = fi(withIcon("Menge", "🔢"), "`" .. tostring(tonumber(count) or 0) .. "`", true)
-    e.fields[#e.fields+1] = fi(withIcon("Slot", "🎯"), "`" .. safeStr(slot) .. "`", true)
-    e.fields[#e.fields+1] = fi(withIcon("Metadaten", "🧾"), "```json\n" .. json.encode(metadata or {}) .. "\n```", false)
+    e.fields[#e.fields+1] = fi(withIcon(t("labels.item"), "🗑️"), "`" .. safeStr(item) .. "`", true)
+    e.fields[#e.fields+1] = fi(withIcon(t("labels.amount"), "🔢"), "`" .. tostring(tonumber(count) or 0) .. "`", true)
+    e.fields[#e.fields+1] = fi(withIcon(t("labels.slot"), "🎯"), "`" .. safeStr(slot) .. "`", true)
+    e.fields[#e.fields+1] = fi(withIcon(t("labels.metadata"), "🧾"), "```json\n" .. json.encode(metadata or {}) .. "\n```", false)
 
     if reason and reason ~= "" then
-        e.fields[#e.fields+1] = fi(withIcon("Grund", "📝"), "`" .. safeStr(reason) .. "`", false)
+        e.fields[#e.fields+1] = fi(withIcon(t("labels.reason"), "📝"), "`" .. safeStr(reason) .. "`", false)
     end
 
     return e
@@ -461,7 +464,7 @@ end
 --============================================================
 local function register()
     if GetResourceState("ox_inventory") ~= "started" then
-        print("^1[InventoryLogs]^0 ox_inventory läuft nicht.")
+        print(t("messages.ox_inventory_not_running"))
         return
     end
 
@@ -493,8 +496,8 @@ local function register()
 
         -- DROP
         if from == "player" and to == "drop" then
-            local e = baseEmbed("Item abgelegt", Config.Colors.drop)
-            e.description = "Ein Item wurde auf den Boden abgelegt."
+            local e = baseEmbed(t("embeds.drop_title"), Config.Colors.drop)
+            e.description = t("embeds.drop_desc")
             e.fields = {}
             for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
             for _, f in ipairs(itemFieldsFromSwap(p)) do e.fields[#e.fields+1] = f end
@@ -504,8 +507,8 @@ local function register()
 
         -- PICKUP
         if from == "drop" and to == "player" then
-            local e = baseEmbed("Item aufgehoben", Config.Colors.pickup)
-            e.description = "Ein Item wurde vom Boden aufgehoben."
+            local e = baseEmbed(t("embeds.pickup_title"), Config.Colors.pickup)
+            e.description = t("embeds.pickup_desc")
             e.fields = {}
             for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
             for _, f in ipairs(itemFieldsFromSwap(p)) do e.fields[#e.fields+1] = f end
@@ -518,18 +521,15 @@ local function register()
             local targetId = resolvePlayerId(p.toInventory)
             if targetId and targetId ~= src then
                 if action == "give" or action == "move" or action == "swap" or action == "stack" then
-                    local e = baseEmbed("Item übergeben", Config.Colors.give)
-                    e.description = "Ein Item wurde zwischen Spielern übertragen."
+                    local e = baseEmbed(t("embeds.give_title"), Config.Colors.give)
+                    e.description = t("embeds.give_desc")
                     e.fields = {}
 
                     for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
 
                     local esxT = esxInfo(targetId)
-                    e.fields[#e.fields+1] = fi(withIcon("Ziel", "🎯"),
-                        ("**%s** (ID: `%s`)\nESX: `%s`\nJob: `%s`\nGroup: `%s`"):format(
-                            pname(targetId), tostring(targetId),
-                            safeStr(esxT.identifier), safeStr(esxT.job), safeStr(esxT.group)
-                        ),
+                    e.fields[#e.fields+1] = fi(withIcon(t("labels.target"), "🎯"),
+                        t("templates.target_player_short", { name = pname(targetId), id = tostring(targetId), identifier = safeStr(esxT.identifier), job = safeStr(esxT.job), group = safeStr(esxT.group) }),
                         false
                     )
 
@@ -543,11 +543,11 @@ local function register()
 
         -- STASH PUT
         if from == "player" and to == "stash" then
-            local e = baseEmbed("In Lager gelegt", Config.Colors.stash)
-            e.description = "Ein Item wurde in ein Lager (Stash) gelegt."
+            local e = baseEmbed(t("embeds.stash_put_title"), Config.Colors.stash)
+            e.description = t("embeds.stash_put_desc")
             e.fields = {}
             for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
-            e.fields[#e.fields+1] = fi(withIcon("Stash", "🗄️"), "`" .. safeStr(p.toInventory) .. "`", true)
+            e.fields[#e.fields+1] = fi(withIcon(t("labels.stash"), "🗄️"), "`" .. safeStr(p.toInventory) .. "`", true)
             for _, f in ipairs(itemFieldsFromSwap(p)) do e.fields[#e.fields+1] = f end
             sendWebhook("stash", { e })
             return
@@ -555,11 +555,11 @@ local function register()
 
         -- STASH TAKE
         if from == "stash" and to == "player" then
-            local e = baseEmbed("Aus Lager genommen", Config.Colors.stash)
-            e.description = "Ein Item wurde aus einem Lager (Stash) genommen."
+            local e = baseEmbed(t("embeds.stash_take_title"), Config.Colors.stash)
+            e.description = t("embeds.stash_take_desc")
             e.fields = {}
             for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
-            e.fields[#e.fields+1] = fi(withIcon("Stash", "🗄️"), "`" .. safeStr(p.fromInventory) .. "`", true)
+            e.fields[#e.fields+1] = fi(withIcon(t("labels.stash"), "🗄️"), "`" .. safeStr(p.fromInventory) .. "`", true)
             for _, f in ipairs(itemFieldsFromSwap(p)) do e.fields[#e.fields+1] = f end
             sendWebhook("stash", { e })
             return
@@ -579,20 +579,20 @@ local function register()
         local count = tonumber(p.count) or 0
         local metadata = json.encode(p.metadata or {})
 
-        local e = baseEmbed("Item erstellt (AddItem)", Config.Colors.create)
-        e.description = "Ein Item wurde erstellt (z. B. AddItem/Shop/Conversion)."
+        local e = baseEmbed(t("embeds.create_title"), Config.Colors.create)
+        e.description = t("embeds.create_desc")
         e.fields = {}
 
         for _, f in ipairs(playerFields(src)) do e.fields[#e.fields+1] = f end
-        e.fields[#e.fields+1] = fi(withIcon("Item", "📦"), "`" .. safeStr(item) .. "`", true)
-        e.fields[#e.fields+1] = fi(withIcon("Menge", "🔢"), "`" .. tostring(count) .. "`", true)
-        e.fields[#e.fields+1] = fi(withIcon("Metadaten", "🧾"), "```json\n" .. metadata .. "\n```", false)
+        e.fields[#e.fields+1] = fi(withIcon(t("labels.item"), "📦"), "`" .. safeStr(item) .. "`", true)
+        e.fields[#e.fields+1] = fi(withIcon(t("labels.amount"), "🔢"), "`" .. tostring(count) .. "`", true)
+        e.fields[#e.fields+1] = fi(withIcon(t("labels.metadata"), "🧾"), "```json\n" .. metadata .. "\n```", false)
 
         local key = (Config.Webhooks.create ~= "" and "create") or "give"
         sendWebhook(key, { e })
     end)
 
-    print("^2[InventoryLogs]^0 ox_inventory Hooks aktiv (swapItems + createItem).")
+    print(t("messages.hooks_active"))
 end
 
 --============================================================
@@ -611,18 +611,16 @@ end)
 
 --============================================================
 -- COMMAND: /removeitem <id> <item> <count>
---  - loggt: Admin + Ziel-Inventar (player:<id>) + Item/Count
---  - entfernt dann per exports.ox_inventory:RemoveItem(targetId, item, count)
 --============================================================
 if Config.RemoveCommand.Enabled then
     RegisterCommand(Config.RemoveCommand.CommandName, function(src, args)
         if src == 0 then
-            print("[removeitem] Nur Ingame (source) unterstützt.")
+            print(t("messages.remove_ingame_only"))
             return
         end
 
         if not isAllowedGroup(src) then
-            TriggerClientEvent("chat:addMessage", src, { args = { "^1Fehler", "Keine Berechtigung." } })
+            TriggerClientEvent("chat:addMessage", src, { args = { t("messages.error_prefix"), t("messages.no_permission") } })
             return
         end
 
@@ -631,12 +629,12 @@ if Config.RemoveCommand.Enabled then
         local count = tonumber(args[3]) or 1
 
         if not targetId or not item or item == "" then
-            TriggerClientEvent("chat:addMessage", src, { args = { "^3Usage", "/removeitem <id> <item> <count>" } })
+            TriggerClientEvent("chat:addMessage", src, { args = { t("messages.usage_prefix"), t("messages.usage_removeitem") } })
             return
         end
 
         if GetPlayerName(targetId) == nil then
-            TriggerClientEvent("chat:addMessage", src, { args = { "^1Fehler", "Ziel-Spieler ist nicht online." } })
+            TriggerClientEvent("chat:addMessage", src, { args = { t("messages.error_prefix"), t("messages.target_not_online") } })
             return
         end
 
@@ -656,9 +654,9 @@ if Config.RemoveCommand.Enabled then
         -- Entfernen
         local removed = exports.ox_inventory:RemoveItem(targetId, item, count)
         if not removed then
-            TriggerClientEvent("chat:addMessage", src, { args = { "^1Fehler", "RemoveItem fehlgeschlagen (Item evtl. nicht vorhanden/zu wenig)." } })
+            TriggerClientEvent("chat:addMessage", src, { args = { t("messages.error_prefix"), t("messages.remove_failed") } })
         else
-            TriggerClientEvent("chat:addMessage", src, { args = { "^2OK", ("Entfernt: %sx %s von ID %s"):format(count, item, targetId) } })
+            TriggerClientEvent("chat:addMessage", src, { args = { t("messages.ok_prefix"), t("messages.remove_success", { count = count, item = item, id = targetId }) } })
         end
     end, false)
 end
