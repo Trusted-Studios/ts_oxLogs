@@ -3,7 +3,7 @@ games { 'rdr3', 'gta5' }
 
 author 'Trusted-Studios <@trusted-studios>'
 description 'OX Logs'
-version '0.0.1'
+version '0.0.2'
 
 shared_script '@es_extended/imports.lua'
 server_script '@oxmysql/lib/MySQL.lua'
